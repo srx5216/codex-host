@@ -24,6 +24,11 @@ if ([string]::IsNullOrWhiteSpace($globalPrefix) -or -not (Test-Path -LiteralPath
     throw 'Could not resolve the npm global prefix.'
 }
 
+$codexHostBin = Join-Path $env:LOCALAPPDATA 'Programs\codexhost\bin'
+if (-not (Test-Path -LiteralPath $codexHostBin -PathType Container)) {
+    throw "CodexHost was not found at the expected per-user install path: $codexHostBin"
+}
+
 $piCommand = Join-Path $globalPrefix 'pi.cmd'
 $claudeCommand = Join-Path $globalPrefix 'claude.cmd'
 foreach ($candidate in @($piCommand, $claudeCommand)) {
@@ -51,10 +56,15 @@ if (-not $SkipPathUpdate) {
         $userPath -split ';' |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
     )
-    if (-not ($pathEntries | Where-Object { $_.TrimEnd('\') -ieq $globalPrefix.TrimEnd('\') })) {
-        $newUserPath = (($pathEntries + $globalPrefix) -join ';')
+    $pathEntriesToAdd = @($globalPrefix, $codexHostBin) |
+        Where-Object {
+            $candidate = $_
+            -not ($pathEntries | Where-Object { $_.TrimEnd('\') -ieq $candidate.TrimEnd('\') })
+        }
+    if ($pathEntriesToAdd.Count -gt 0) {
+        $newUserPath = (($pathEntries + $pathEntriesToAdd) -join ';')
         [Environment]::SetEnvironmentVariable('Path', $newUserPath, 'User')
-        $env:Path = "$globalPrefix;$env:Path"
+        $env:Path = (($pathEntriesToAdd -join ';') + ';' + $env:Path)
     }
 }
 
@@ -63,5 +73,6 @@ if (-not $SkipPathUpdate) {
 Write-Output ('Codex Desktop: ' + $desktop.Version + ' (' + $desktop.InstallLocation + ')')
 Write-Output ('Pi command: ' + $piCommand)
 Write-Output ('Claude Code command: ' + $claudeCommand)
+Write-Output ('CodexHost binary: ' + (Join-Path $codexHostBin 'codexhost.exe'))
 Write-Output 'Persisted: CODEXHOST_PI_COMMAND, CODEXHOST_CLAUDE_COMMAND'
 Write-Output 'CODEXHOST_INSTALL_ROOT: not set (AppX auto-discovery)'
